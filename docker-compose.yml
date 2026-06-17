@@ -1,0 +1,182 @@
+services:
+
+  # ──────────────────────────────────────────
+  # IDENTITY: Keycloak + PostgreSQL
+  # ──────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - poc
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks:
+      - poc
+
+  # ──────────────────────────────────────────
+  # GATEWAY: APISIX + etcd
+  # ──────────────────────────────────────────
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.21
+    command:
+      - etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd-data
+    volumes:
+      - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://localhost:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - poc
+
+  apisix:
+    image: apache/apisix:3.16.0-debian
+    user: root
+    entrypoint: ["/bin/sh", "/tmp/apisix-init/entrypoint.sh"]
+    volumes:
+      - ./apisix/config.yaml:/tmp/apisix-init/config.yaml:ro
+      - ./apisix/entrypoint.sh:/tmp/apisix-init/entrypoint.sh:ro
+    ports:
+      - "9080:9080"   # HTTP
+      - "9443:9443"   # HTTPS
+      - "9092:9092"   # Admin API (interno)
+    depends_on:
+      etcd:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    networks:
+      - poc
+
+  # ──────────────────────────────────────────
+  # POLICY ENGINE: OPA
+  # ──────────────────────────────────────────
+  opa:
+    image: openpolicyagent/opa:1.17.1-debug
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --log-level=info
+      - --log-format=json-pretty
+      - /policies
+    volumes:
+      - ./opa:/policies:ro
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8181/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - poc
+
+  # ──────────────────────────────────────────
+  # SECRETS: OpenBao
+  # ──────────────────────────────────────────
+  openbao:
+    image: quay.io/openbao/openbao:2.2.0
+    command: server -dev
+    cap_add:
+      - IPC_LOCK
+    environment:
+      BAO_ADDR: http://0.0.0.0:8200
+      BAO_DEV_ROOT_TOKEN_ID: root-token
+    ports:
+      - "8200:8200"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - poc
+
+  # ──────────────────────────────────────────
+  # ORCHESTRATOR: Mock del orquestador de agentes
+  # ──────────────────────────────────────────
+  orchestrator:
+    build: ./orchestrator
+    environment:
+      OPA_URL: http://opa:8181
+      OPENBAO_URL: http://openbao:8200
+      OPENBAO_TOKEN: root-token
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ai-platform
+    # Sin "ports": solo accesible desde la red "poc" (vía APISIX en /orchestrator/*,
+    # que valida el JWT con openid-connect). El propio orquestador decodifica ese
+    # JWT para identificar al caller — ver orchestrator/app.py.
+    depends_on:
+      opa:
+        condition: service_healthy
+      openbao:
+        condition: service_healthy
+    networks:
+      - poc
+
+  # ──────────────────────────────────────────
+  # MOCK BACKEND: upstream de APISIX
+  # ──────────────────────────────────────────
+  mock-backend:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./mock-backend/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./mock-backend/responses:/usr/share/nginx/html:ro
+    ports:
+      - "9090:80"
+    networks:
+      - poc
+
+volumes:
+  postgres_data:
+  etcd_data:
+  openbao_data:
+
+networks:
+  poc:
+    driver: bridge

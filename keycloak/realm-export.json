@@ -1,0 +1,169 @@
+{
+  "realm": "ai-platform",
+  "enabled": true,
+  "displayName": "AI Platform",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 900,
+  "clients": [
+    {
+      "clientId": "apisix",
+      "name": "APISIX Gateway",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "apisix-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:9080/*"],
+      "webOrigins": ["*"],
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "tenant-id-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "team-id-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "team_id",
+            "claim.name": "team_id",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "realm-roles-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "orchestrator",
+      "name": "AI Orchestrator",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "orchestrator-client-secret",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "agent-acme-001",
+      "name": "Agent ACME 001 (accionable)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-acme-001-secret",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "agent.level": "accionable",
+        "agent.owner": "alice"
+      }
+    },
+    {
+      "clientId": "agent-acme-002",
+      "name": "Agent ACME 002 (asesor)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "agent-acme-002-secret",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "agent.level": "asesor",
+        "agent.owner": "alice"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "user",                "description": "Usuario final de la plataforma" },
+      { "name": "admin",               "description": "Administrador del tenant" },
+      { "name": "platform_admin",      "description": "Administrador global de la plataforma" },
+      { "name": "agent:informativo",   "description": "Agente de solo lectura/consulta" },
+      { "name": "agent:asesor",        "description": "Agente que puede proponer acciones" },
+      { "name": "agent:accionable",    "description": "Agente que puede ejecutar acciones" }
+    ]
+  },
+  "users": [
+    {
+      "username": "alice",
+      "firstName": "Alice",
+      "lastName": "Acme",
+      "email": "alice@acme.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "alice123", "temporary": false }],
+      "realmRoles": ["user"],
+      "attributes": {
+        "tenant_id": ["acme"],
+        "team_id": ["platform-team"]
+      }
+    },
+    {
+      "username": "bob",
+      "firstName": "Bob",
+      "lastName": "Acme",
+      "email": "bob@acme.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "bob123", "temporary": false }],
+      "realmRoles": ["admin"],
+      "attributes": {
+        "tenant_id": ["acme"],
+        "team_id": ["platform-team"]
+      }
+    },
+    {
+      "username": "carol",
+      "firstName": "Carol",
+      "lastName": "Globex",
+      "email": "carol@globex.com",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "carol123", "temporary": false }],
+      "realmRoles": ["user"],
+      "attributes": {
+        "tenant_id": ["globex"],
+        "team_id": ["ops-team"]
+      }
+    },
+    {
+      "username": "dave",
+      "firstName": "Dave",
+      "lastName": "Platform",
+      "email": "dave@platform.io",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "dave123", "temporary": false }],
+      "realmRoles": ["platform_admin"],
+      "attributes": {
+        "tenant_id": ["platform"],
+        "team_id": []
+      }
+    }
+  ]
+}

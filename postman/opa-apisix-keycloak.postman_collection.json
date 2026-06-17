@@ -1,0 +1,754 @@
+{
+  "info": {
+    "_postman_id": "poc-opa-apisix-keycloak",
+    "name": "OPA + APISIX + Keycloak PoC",
+    "description": "Colección para la PoC de autorización con OPA + Apache APISIX + Keycloak + OpenBao.\n\nUso:\n1. Ejecutar las peticiones de '00 - Auth' para obtener los tokens (se guardan automáticamente como variables de colección).\n2. El resto de carpetas usan {{token_alice}}, {{token_bob}}, {{token_carol}} en sus headers de autorización.\n\nTodas las URLs y credenciales están definidas como variables de colección — no es necesario importar un environment aparte.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Auth (Impersonación)",
+      "item": [
+        {
+          "name": "Get Token - alice (user, tenant acme)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('token_alice', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",     "value": "password",              "type": "text" },
+                { "key": "client_id",      "value": "{{client_id}}",         "type": "text" },
+                { "key": "client_secret",  "value": "{{client_secret}}",     "type": "text" },
+                { "key": "username",       "value": "{{alice_username}}",    "type": "text" },
+                { "key": "password",       "value": "{{alice_password}}",    "type": "text" },
+                { "key": "scope",          "value": "openid profile email",  "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Token - bob (admin, tenant acme)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('token_bob', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",     "value": "password",              "type": "text" },
+                { "key": "client_id",      "value": "{{client_id}}",         "type": "text" },
+                { "key": "client_secret",  "value": "{{client_secret}}",     "type": "text" },
+                { "key": "username",       "value": "{{bob_username}}",      "type": "text" },
+                { "key": "password",       "value": "{{bob_password}}",      "type": "text" },
+                { "key": "scope",          "value": "openid profile email",  "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Token - carol (user, tenant globex)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('token_carol', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",     "value": "password",              "type": "text" },
+                { "key": "client_id",      "value": "{{client_id}}",         "type": "text" },
+                { "key": "client_secret",  "value": "{{client_secret}}",     "type": "text" },
+                { "key": "username",       "value": "{{carol_username}}",    "type": "text" },
+                { "key": "password",       "value": "{{carol_password}}",    "type": "text" },
+                { "key": "scope",          "value": "openid profile email",  "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Introspect Token - alice",
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{client_id}}",     "type": "string" },
+                { "key": "password", "value": "{{client_secret}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "token", "value": "{{token_alice}}", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token/introspect",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token", "introspect"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Fase 1 - Gateway",
+      "item": [
+        {
+          "name": "GET Conversations - alice (200)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apisix_url}}/api/conversations",
+              "host": ["{{apisix_url}}"],
+              "path": ["api", "conversations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Conversations - alice (403)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apisix_url}}/api/conversations",
+              "host": ["{{apisix_url}}"],
+              "path": ["api", "conversations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Conversations - bob (200)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_bob}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apisix_url}}/api/conversations",
+              "host": ["{{apisix_url}}"],
+              "path": ["api", "conversations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Conversations - carol (403 cross-tenant)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_carol}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apisix_url}}/api/conversations",
+              "host": ["{{apisix_url}}"],
+              "path": ["api", "conversations"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPA Debug - gateway policy (DELETE alice)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": {\n    \"type\": \"http\",\n    \"request\": {\n      \"method\": \"DELETE\",\n      \"path\": \"/api/conversations\",\n      \"headers\": { \"authorization\": \"Bearer {{token_alice}}\" }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{opa_url}}/v1/data/gateway",
+              "host": ["{{opa_url}}"],
+              "path": ["v1", "data", "gateway"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Fase 2 - Orchestrator ABAC",
+      "item": [
+        {
+          "name": "Authorize Resource - alice KB global (allow)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": {\n    \"type\": \"knowledge_base\",\n    \"id\": \"kb-1\",\n    \"visibility\": \"global\",\n    \"owner_id\": \"bob\",\n    \"owner_team_id\": \"platform-team\",\n    \"tenant_id\": \"acme\",\n    \"sensitivity\": \"low\"\n  },\n  \"action\": \"read\",\n  \"purpose\": \"agent-assist\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize Resource - carol cross-tenant (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_carol}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": {\n    \"type\": \"knowledge_base\",\n    \"id\": \"kb-1\",\n    \"visibility\": \"global\",\n    \"owner_id\": \"bob\",\n    \"owner_team_id\": \"platform-team\",\n    \"tenant_id\": \"acme\",\n    \"sensitivity\": \"low\"\n  },\n  \"action\": \"read\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize Resource - alice sensibilidad alta (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": {\n    \"type\": \"knowledge_base\",\n    \"id\": \"kb-5\",\n    \"visibility\": \"tenant\",\n    \"owner_id\": \"bob\",\n    \"owner_team_id\": \"platform-team\",\n    \"tenant_id\": \"acme\",\n    \"sensitivity\": \"high\"\n  },\n  \"action\": \"read\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize Resource - bob sensibilidad alta (allow)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_bob}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": {\n    \"type\": \"knowledge_base\",\n    \"id\": \"kb-5\",\n    \"visibility\": \"tenant\",\n    \"owner_id\": \"bob\",\n    \"owner_team_id\": \"platform-team\",\n    \"tenant_id\": \"acme\",\n    \"sensitivity\": \"high\"\n  },\n  \"action\": \"read\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize Resource - sin token (401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": { \"id\": \"kb-1\" },\n  \"action\": \"read\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize Resource - alice lee su conversacion (allow)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": {\n    \"type\": \"conversation\",\n    \"id\": \"conv-1\",\n    \"visibility\": \"private\",\n    \"owner_id\": \"alice\",\n    \"owner_team_id\": \"platform-team\",\n    \"tenant_id\": \"acme\",\n    \"sensitivity\": \"low\"\n  },\n  \"action\": \"read\",\n  \"purpose\": \"agent-assist\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Authorize Resource - carol lee conversacion de alice (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_carol}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resource\": {\n    \"type\": \"conversation\",\n    \"id\": \"conv-1\",\n    \"visibility\": \"private\",\n    \"owner_id\": \"alice\",\n    \"owner_team_id\": \"platform-team\",\n    \"tenant_id\": \"acme\",\n    \"sensitivity\": \"low\"\n  },\n  \"action\": \"read\",\n  \"purpose\": \"agent-assist\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/resource",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "resource"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPA Debug - agente como sujeto en orchestrator (allow)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": {\n    \"user\": {\n      \"id\": \"agent-acme-001\",\n      \"roles\": [\"agent:accionable\"],\n      \"tenant_id\": \"acme\",\n      \"team_id\": \"platform-team\"\n    },\n    \"resource\": {\n      \"type\": \"knowledge_base\",\n      \"id\": \"kb-1\",\n      \"visibility\": \"global\",\n      \"owner_id\": \"bob\",\n      \"owner_team_id\": \"platform-team\",\n      \"tenant_id\": \"acme\",\n      \"sensitivity\": \"low\"\n    },\n    \"action\": \"read\",\n    \"purpose\": \"agent-assist\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{opa_url}}/v1/data/orchestrator",
+              "host": ["{{opa_url}}"],
+              "path": ["v1", "data", "orchestrator"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Fase 3 - Agent Scopes",
+      "item": [
+        {
+          "name": "Agent Action - accionable crea ticket (allow)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":  { \"id\": \"agent-acme-001\", \"level\": \"accionable\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"tool\":   \"ticketing\",\n  \"action\": \"create\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/agent-action",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "agent-action"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent Action - asesor crea ticket (pending_approval)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":  { \"id\": \"agent-acme-002\", \"level\": \"asesor\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"tool\":   \"ticketing\",\n  \"action\": \"create\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/agent-action",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "agent-action"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent Action - informativo crea ticket (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":  { \"id\": \"agent-acme-003\", \"level\": \"informativo\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"tool\":   \"ticketing\",\n  \"action\": \"create\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/agent-action",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "agent-action"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent Action - accionable despliega (pending_approval)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":  { \"id\": \"agent-acme-001\", \"level\": \"accionable\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"tool\":   \"deployment\",\n  \"action\": \"deploy\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/authorize/agent-action",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["authorize", "agent-action"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPA Debug - agents decision (deployment deploy)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input\": {\n    \"agent\":  { \"id\": \"agent-acme-001\", \"level\": \"accionable\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n    \"tool\":   \"deployment\",\n    \"action\": \"deploy\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{opa_url}}/v1/data/agents/decision",
+              "host": ["{{opa_url}}"],
+              "path": ["v1", "data", "agents", "decision"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Fase 4 - Secrets",
+      "item": [
+        {
+          "name": "Secrets Access - accionable lee Jira (allow)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":        { \"id\": \"agent-acme-001\", \"level\": \"accionable\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"secret_path\":  \"agents/agent-acme-001/credentials/jira\",\n  \"operation\":    \"read\",\n  \"on_behalf_of\": \"alice\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/secrets/access",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["secrets", "access"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Secrets Access - agente lee credenciales de otro agente (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":        { \"id\": \"agent-acme-001\", \"level\": \"accionable\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"secret_path\":  \"agents/agent-acme-002/credentials/confluence\",\n  \"operation\":    \"read\",\n  \"on_behalf_of\": \"alice\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/secrets/access",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["secrets", "access"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Secrets Access - on_behalf_of incorrecto (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":        { \"id\": \"agent-acme-001\", \"level\": \"accionable\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"secret_path\":  \"agents/agent-acme-001/credentials/jira\",\n  \"operation\":    \"read\",\n  \"on_behalf_of\": \"eve\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/secrets/access",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["secrets", "access"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Secrets Access - asesor intenta escribir (deny)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token_alice}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent\":        { \"id\": \"agent-acme-002\", \"level\": \"asesor\", \"owner_id\": \"alice\", \"tenant_id\": \"acme\" },\n  \"secret_path\":  \"agents/agent-acme-002/credentials/confluence\",\n  \"operation\":    \"write\",\n  \"on_behalf_of\": \"alice\",\n  \"secret_data\":  { \"api_token\": \"new-token\" }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orchestrator_url}}/secrets/access",
+              "host": ["{{orchestrator_url}}"],
+              "path": ["secrets", "access"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - Troubleshooting",
+      "item": [
+        {
+          "name": "Keycloak Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{keycloak_url}}/health/ready",
+              "host": ["{{keycloak_url}}"],
+              "path": ["health", "ready"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPA Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{opa_url}}/health",
+              "host": ["{{opa_url}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPA Policies Loaded",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{opa_url}}/v1/policies",
+              "host": ["{{opa_url}}"],
+              "path": ["v1", "policies"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "OPA Status (bundles)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{opa_url}}/v1/status",
+              "host": ["{{opa_url}}"],
+              "path": ["v1", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "APISIX Admin - List Routes",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              { "key": "X-API-KEY", "value": "{{apisix_admin_key}}" }
+            ],
+            "url": {
+              "raw": "{{apisix_admin_url}}/apisix/admin/routes",
+              "host": ["{{apisix_admin_url}}"],
+              "path": ["apisix", "admin", "routes"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "keycloak_url",     "value": "http://localhost:8080" },
+    { "key": "keycloak_realm",   "value": "ai-platform" },
+    { "key": "client_id",        "value": "apisix" },
+    { "key": "client_secret",    "value": "apisix-client-secret" },
+    { "key": "apisix_url",       "value": "http://localhost:9080" },
+    { "key": "apisix_admin_url", "value": "http://localhost:9092" },
+    { "key": "apisix_admin_key", "value": "edd1c9f034335f136f87ad84b625c8f1" },
+    { "key": "opa_url",          "value": "http://localhost:8181" },
+    { "key": "orchestrator_url", "value": "http://localhost:9080/orchestrator" },
+    { "key": "alice_username",   "value": "alice" },
+    { "key": "alice_password",   "value": "alice123" },
+    { "key": "bob_username",     "value": "bob" },
+    { "key": "bob_password",     "value": "bob123" },
+    { "key": "carol_username",   "value": "carol" },
+    { "key": "carol_password",   "value": "carol123" },
+    { "key": "token_alice",      "value": "" },
+    { "key": "token_bob",        "value": "" },
+    { "key": "token_carol",      "value": "" }
+  ]
+}
